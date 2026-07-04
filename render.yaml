@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: quo-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run dashboard.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: QUO_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: GOOGLE_SHEET_ID
+        sync: false
+
+  - type: cron
+    name: quo-ingest
+    runtime: python
+    plan: free
+    schedule: "0 13 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python ingest.py
+    envVars:
+      - key: QUO_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: GOOGLE_SHEET_ID
+        sync: false
