@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import requests
 
 from config import QUO_API_KEY, QUO_BASE_URL

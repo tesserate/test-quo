@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from config import EXCLUDED_SHARED_USER_ID, LEAD_STATUS_FIELD_NAME
 
 
@@ -21,19 +23,9 @@ def get_custom_field_value(contact: dict, field_key: str) -> str | None:
 
 
 def get_shared_with_ids(contact: dict) -> list[str]:
-    """Quo's public list-contacts response doesn't document a sharedWith
-    field, but webhook payloads reference sharedWithIds on contacts. Check the
-    known candidate locations and fall back to empty. Run probe.py against a
-    real contact to confirm which of these actually holds data before relying
-    on salesperson attribution.
-    """
-    for key in ("sharedWithIds", "sharedWith"):
-        if contact.get(key):
-            return contact[key]
-        nested = contact.get("defaultFields", {}).get(key)
-        if nested:
-            return nested
-    return []
+    """Contacts have both a single-owner `userId` field and a `sharedWith`
+    array of user ids. Salesperson attribution uses sharedWith, not userId."""
+    return contact.get("sharedWith") or []
 
 
 def resolve_salesperson(shared_with_ids: list[str]) -> str | None:
