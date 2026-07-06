@@ -3,7 +3,6 @@ days of calls, and appends timestamped rows to the Google Sheet.
 
 Run manually with `python ingest.py`, or on a schedule (see render.yaml).
 """
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 
@@ -19,25 +18,14 @@ from quo.transform import (
 )
 from sheets import SheetStore
 
-CALL_FETCH_WORKERS = 4
-
-_thread_local = threading.local()
-
-
-def _client_for_thread() -> QuoClient:
-    # A requests.Session (and its SSL context) isn't safe to share across
-    # threads, so each worker thread gets its own QuoClient/session.
-    if not hasattr(_thread_local, "client"):
-        _thread_local.client = QuoClient()
-    return _thread_local.client
+CALL_FETCH_WORKERS = 6
 
 
 def iso(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def fetch_calls_for_contact(phone, phone_numbers, calls_after):
-    client = _client_for_thread()
+def fetch_calls_for_contact(client, phone, phone_numbers, calls_after):
     rows = []
     for pn in phone_numbers:
         rows.extend(client.list_calls(pn["id"], phone, created_after=calls_after))
@@ -110,7 +98,7 @@ def main():
     done = 0
     with ThreadPoolExecutor(max_workers=CALL_FETCH_WORKERS) as executor:
         futures = {
-            executor.submit(fetch_calls_for_contact, phone, phone_numbers, calls_after): (contact_id, phone)
+            executor.submit(fetch_calls_for_contact, client, phone, phone_numbers, calls_after): (contact_id, phone)
             for contact_id, phone in contacts_with_phone
         }
         for future in as_completed(futures):

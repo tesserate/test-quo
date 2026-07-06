@@ -11,16 +11,27 @@ MAX_RETRIES = 5
 
 class QuoClient:
     def __init__(self, api_key: str = QUO_API_KEY, base_url: str = QUO_BASE_URL):
-        self.session = requests.Session()
-        self.session.headers.update({
+        self.headers = {
             "Authorization": api_key,
             "Accept": "application/json",
-        })
+        }
         self.base_url = base_url
 
     def _get(self, path: str, params: dict | None = None) -> dict:
         for attempt in range(MAX_RETRIES):
-            resp = self.session.get(f"{self.base_url}{path}", params=params, timeout=30)
+            # A fresh session/connection per request rather than a shared,
+            # reused one -- some local environments run this against a
+            # deprecated SSL shim that can't safely reuse a connection's SSL
+            # context once a new TCP connection needs to be established.
+            try:
+                with requests.Session() as session:
+                    session.headers.update(self.headers)
+                    resp = session.get(f"{self.base_url}{path}", params=params, timeout=30)
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                raise
             if resp.status_code == 429 and attempt < MAX_RETRIES - 1:
                 wait = float(resp.headers.get("Retry-After", 2 ** attempt))
                 time.sleep(wait)
