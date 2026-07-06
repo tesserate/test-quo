@@ -1,52 +1,65 @@
 from __future__ import annotations
 
-from config import EXCLUDED_SHARED_USER_ID, LEAD_STATUS_FIELD_NAME
+import re
+
+from config import LEAD_STATUS_FIELD_NAME, OWNER_FIELD_NAME
 
 
-def resolve_lead_status_key(custom_fields: list[dict]) -> str | None:
+def resolve_custom_field_key(custom_fields: list[dict], field_name: str) -> str | None:
     for field in custom_fields:
-        if field.get("name", "").strip().lower() == LEAD_STATUS_FIELD_NAME.lower():
+        if field.get("name", "").strip().lower() == field_name.lower():
             return field.get("key")
     return None
 
 
-def get_custom_field_value(contact: dict, field_key: str) -> str | None:
+def resolve_lead_status_key(custom_fields: list[dict]) -> str | None:
+    return resolve_custom_field_key(custom_fields, LEAD_STATUS_FIELD_NAME)
+
+
+def resolve_owner_key(custom_fields: list[dict]) -> str | None:
+    return resolve_custom_field_key(custom_fields, OWNER_FIELD_NAME)
+
+
+def get_custom_field_values(contact: dict, field_key: str) -> list[str]:
+    """Multi-select custom fields return a list of selected option strings.
+    Some historical records have stray bracket characters from a bad import
+    (e.g. "[Submitted form]") -- strip those."""
     for field in contact.get("customFields", []):
         if field.get("key") != field_key:
             continue
-        if field.get("value") is not None:
-            return field["value"]
-        values = field.get("values")
-        if values:
-            return values[0]
-    return None
+        value = field.get("value")
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            value = [value]
+        return [v.strip("[]").strip() for v in value if v]
+    return []
 
 
-def get_shared_with_ids(contact: dict) -> list[str]:
-    """Contacts have both a single-owner `userId` field and a `sharedWith`
-    array of user ids. Salesperson attribution uses sharedWith, not userId."""
-    return contact.get("sharedWith") or []
+def _normalize(label: str) -> str:
+    return re.sub(r"\s+", " ", label).strip().lower().rstrip("s")
 
 
-def resolve_salesperson(shared_with_ids: list[str]) -> str | None:
-    """USusrXwEf3 is a shared/team id, not an individual salesperson. When
-    multiple ids are present, skip it and use the id that follows it."""
-    ids = [i for i in shared_with_ids if i]
-    if not ids:
-        return None
-    if len(ids) == 1:
-        return ids[0]
-    if EXCLUDED_SHARED_USER_ID in ids:
-        idx = ids.index(EXCLUDED_SHARED_USER_ID)
-        if idx + 1 < len(ids):
-            return ids[idx + 1]
-        remaining = [i for i in ids if i != EXCLUDED_SHARED_USER_ID]
-        if remaining:
-            return remaining[0]
-    return ids[0]
-
-
-def bucket_status(raw_status: str | None, status_order: list[str]) -> str:
-    if raw_status in status_order:
-        return raw_status
+def bucket_status(raw_values: list[str], status_order: list[str]) -> str:
+    """Lead Status is multi-select, so a contact can hold more than one value
+    at once (e.g. "Submitted form" and "Large Build Form" together). Use the
+    furthest-along recognized stage in status_order; anything unrecognized,
+    including no value at all, falls into "Other"."""
+    normalized = {_normalize(v) for v in raw_values}
+    for status in status_order:
+        if status == "Other":
+            continue
+        if _normalize(status) in normalized:
+            return status
     return "Other"
+
+
+def get_owner_name(contact: dict, owner_field_key: str | None) -> str | None:
+    if not owner_field_key:
+        return None
+    values = get_custom_field_values(contact, owner_field_key)
+    return values[0] if values else None
+
+
+def build_name_to_user_id(users: list[dict]) -> dict[str, str]:
+    return {u["firstName"].strip().lower(): u["id"] for u in users if u.get("firstName")}

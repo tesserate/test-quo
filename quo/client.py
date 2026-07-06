@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import time
+
 import requests
 
 from config import QUO_API_KEY, QUO_BASE_URL
+
+MAX_RETRIES = 5
 
 
 class QuoClient:
@@ -15,9 +19,14 @@ class QuoClient:
         self.base_url = base_url
 
     def _get(self, path: str, params: dict | None = None) -> dict:
-        resp = self.session.get(f"{self.base_url}{path}", params=params, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        for attempt in range(MAX_RETRIES):
+            resp = self.session.get(f"{self.base_url}{path}", params=params, timeout=30)
+            if resp.status_code == 429 and attempt < MAX_RETRIES - 1:
+                wait = float(resp.headers.get("Retry-After", 2 ** attempt))
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp.json()
 
     def _paginated(self, path: str, params: dict) -> list[dict]:
         items: list[dict] = []
