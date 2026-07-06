@@ -18,20 +18,24 @@ CALLS_TAB = "Calls Snapshot"
 
 CONTACTS_HEADER = [
     "snapshot_date", "snapshot_at", "contact_id", "first_name", "last_name",
-    "phone", "lead_status", "salesperson_user_id", "contact_created_at",
+    "phone", "lead_status", "owner_user_id", "contact_created_at",
 ]
 CALLS_HEADER = [
     "call_id", "contact_id", "phone", "salesperson_user_id",
     "direction", "duration_sec", "created_at", "saved_at",
 ]
 
-# The name of the custom field to read for pipeline stage, resolved dynamically
-# against /v1/contact-custom-fields by name (case-insensitive) rather than a
-# hardcoded key, since custom field keys can change per-workspace.
+# Names of the custom fields to read, resolved dynamically against
+# /v1/contact-custom-fields by name (case-insensitive) rather than a hardcoded
+# key, since custom field keys are workspace-specific opaque ids.
 LEAD_STATUS_FIELD_NAME = "Lead Status"
+OWNER_FIELD_NAME = "Owner"
 
-# Order to display lead status columns in; anything not in this list is folded
-# into "Other".
+# Order to display lead status columns in; anything not matching one of these
+# (case/pluralization-insensitively) is folded into "Other". Confirmed via
+# probe.py that Lead Status is multi-select and real workspace data is messier
+# than this list (also has Dropped, Large Build Form, circle back, Promising,
+# Closed, Called) -- those all fall into Other.
 STATUS_ORDER = [
     "Submitted form",
     "Quoting call Booked",
@@ -40,11 +44,9 @@ STATUS_ORDER = [
     "Other",
 ]
 
-# Contacts can be shared with multiple workspace users. USusrXwEf3 is a shared
-# team-level id rather than an individual salesperson, so when a contact has
-# multiple sharedWith ids we skip it and attribute the contact to the id that
-# follows it in the list. Confirmed via probe.py against real data.
-EXCLUDED_SHARED_USER_ID = "USusrXwEf3"
+# The workspace owner isn't an individual salesperson -- excluded from
+# salesperson-level call/ownership stats.
+EXCLUDED_SALESPERSON_USER_IDS = {"USusrXwEf3"}
 
 STATUS_AGING_THRESHOLD_DAYS = 14
 CALLS_WINDOW_DAYS = 7
